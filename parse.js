@@ -83,6 +83,18 @@ function parse(markdown) {
   const hr = l => /^ {0,3}(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})$/.test(l);
   const listMark = l => l.match(/^( {0,3})([*+-]|[0-9]{1,9}[.)])([ \t]+|$)(.*)$/);
   const refsRe = /^ {0,3}\[([^\]]+)\]:[ \t]*(?:<([^>]+)>|([^ \t]+))(?:[ \t]+(?:"([^"]*)"|'([^']*)'|\(([^)]*)\)))?[ \t]*$/;
+  const unindentColumns = (value, columns) => {
+    let removed = 0, pos = 0;
+    while (pos < value.length && removed < columns) {
+      if (value[pos] === ' ') { removed++; pos++; }
+      else if (value[pos] === '\t') {
+        const width = 4 - removed % 4;
+        if (removed + width > columns) return ' '.repeat(removed + width - columns) + value.slice(pos + 1);
+        removed += width; pos++;
+      } else break;
+    }
+    return value.slice(pos);
+  };
   function starts(i) { const l = lines[i] || ''; return !!(blank(l) || heading(l) || fence(l) || quote(l) || hr(l) || listMark(l) || refsRe.test(l) || /^ {0,3}</.test(l)); }
   for (let i = 0; i < lines.length;) {
     let line = lines[i];
@@ -103,7 +115,7 @@ function parse(markdown) {
       while (i < lines.length) {
         const m = lines[i].match(/^( {0,3})([*+-]|[0-9]{1,9}[.)])([ \t]+|$)(.*)$/); if (!m || /^\d/.test(m[2]) !== ordered) break;
         const base = m[1].length, contentIndent = base + m[2].length + (m[3] ? m[3].length : 1), item = [m[4]]; i++;
-        while (i < lines.length) { if (blank(lines[i])) { if (i + 1 < lines.length && (indent(lines[i + 1]) >= contentIndent || !starts(i + 1))) { item.push(''); i++; continue; } break; } const next = lines[i].match(/^( {0,3})([*+-]|[0-9]{1,9}[.)])([ \t]+|$)/); if (next && next[1].length <= base) break; if (indent(lines[i]) >= contentIndent) item.push(lines[i].slice(contentIndent)); else if (!starts(i)) item.push(lines[i].replace(/^ {0,3}/, '')); else break; i++; }
+        while (i < lines.length) { if (blank(lines[i])) { if (i + 1 < lines.length && (visualIndent(lines[i + 1]) >= contentIndent || !starts(i + 1))) { item.push(''); i++; continue; } break; } const next = lines[i].match(/^( {0,3})([*+-]|[0-9]{1,9}[.)])([ \t]+|$)/); if (next && next[1].length <= base) break; if (visualIndent(lines[i]) >= contentIndent) item.push(unindentColumns(lines[i], contentIndent)); else if (!starts(i)) item.push(lines[i].replace(/^ {0,3}/, '')); else break; i++; }
         while (item.at(-1) === '') item.pop(); if (item.some((x, k) => x === '' && k < item.length - 1)) loose = true; items.push(item);
         if (blank(lines[i] || '')) { let j = i; while (j < lines.length && blank(lines[j])) j++; const nx = (lines[j] || '').match(/^( {0,3})([*+-]|[0-9]{1,9}[.)])/); if (nx && nx[1].length <= base) { loose = true; i = j; continue; } }
       }
